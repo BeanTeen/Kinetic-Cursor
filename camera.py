@@ -36,9 +36,12 @@ def main():
                 cv2.circle(frame, (px, py), radius=5, color=(0,255,0), thickness=-1)
         cv2.imshow("Point Tracker", frame)
         
-        if cv2.waitKey(1) and 0xFF == ord('q'):
+        if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
     cam.release()
     cv2.destroyAllWindows()
     tracker.close()
+
+if __name__ == "__main__":
+    main()

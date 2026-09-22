@@ -74,12 +74,18 @@ class gestureClassifier:
             dy = landmarks[8].y - landmarks[5].y
             dx = landmarks[8].x - landmarks[5].x
 
+            dy_safe = abs(dy) if abs(dy) > 0.0001 else 0.0001
+            if (abs(dx) / dy_safe) > config.POINT_HORIZONTAL_RATIO:
+                if dx < -0.05:
+                    return 'left'
+                elif dx > 0.05:
+                    return 'right'
             dx_safe = abs(dx) if abs(dx) > 0.0001 else 0.0001
-            if (abs(dy) / dx_safe) > config.POINT_VERTICAL_RATIO:
+            if (abs(dy)/dx_safe) > config.POINT_VERTICAL_RATIO:
                 if dy < -0.05:
-                    return 'up'
-                elif dy > 0.05:
                     return 'down'
+                elif dy > 0.05:
+                    return 'up'
         return None
         
 class cursorSmoother:
