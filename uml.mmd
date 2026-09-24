@@ -1,0 +1,74 @@
+classDiagram
+	direction TB
+
+	class CameraModule {
+		+main()
+		-cam
+		-tracker
+	}
+
+	class gesture {
+		-_landmarker
+		-_timeStamp
+		+__init__(model_path, num_hands)
+		+process(frame)
+		+close()
+	}
+
+	class gestureClassifier {
+		+classify(landmarks) dict
+		-_dist(a, b)
+		-_finger_extended(landmarks, mcp_idx, tip_idx)
+		-_is_fist(landmarks)
+		-_is_open_palm(landmarks)
+		-_pointing_direction(landmarks)
+	}
+
+	class cursorSmoother {
+		+alpha
+		-_smoothed
+		+__init__(alpha)
+		+update(pos)
+		+reset()
+	}
+
+	class gestureStateMachine {
+		+db_frames
+		+cooldown_ms
+		+scroll_rep_ms
+		+__init__(db_frames, cooldown_ms, scroll_rep_ms)
+		+update(signals, timestamp_ms) list
+		-_update_index_pinch(signals, cursor_pos)
+		-_update_middle_pinch(signals, cursor_pos)
+		-_update_fist(signals, timestamp_ms)
+		-_update_palm(signals, timestamp_ms)
+		-_update_scroll(signals, timestamp_ms)
+	}
+
+	class config {
+		<<module>>
+	}
+
+	class HandLandmarker {
+		<<external>>
+	}
+
+	class OpenCV {
+		<<external module>>
+	}
+
+	CameraModule ..> OpenCV : captures and displays frames
+	CameraModule ..> config : reads camera settings
+	CameraModule --> gesture : creates tracker
+	CameraModule --> gesture : process(frame)
+	gesture --> CameraModule : hand landmarks
+	CameraModule --> gesture : close()
+
+	gesture *-- HandLandmarker : creates
+	gesture ..> config : reads model settings
+	gestureClassifier ..> config : reads geometry thresholds
+	cursorSmoother ..> config : reads alpha
+	gestureStateMachine ..> config : reads event thresholds
+	gestureClassifier ..> gesture : classifies landmarks from process()
+	gestureStateMachine ..> gestureClassifier : consumes classified signals
+	cursorSmoother ..> gestureClassifier : smooths cursor_pos

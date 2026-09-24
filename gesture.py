@@ -80,12 +80,6 @@ class gestureClassifier:
                     return 'left'
                 elif dx > 0.05:
                     return 'right'
-            dx_safe = abs(dx) if abs(dx) > 0.0001 else 0.0001
-            if (abs(dy)/dx_safe) > config.POINT_VERTICAL_RATIO:
-                if dy < -0.05:
-                    return 'down'
-                elif dy > 0.05:
-                    return 'up'
         return None
         
 class cursorSmoother:
