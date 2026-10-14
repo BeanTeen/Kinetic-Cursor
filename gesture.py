@@ -22,7 +22,7 @@ class gesture:
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
         self._timeStamp += 33 #shows timestamp in ms
 
-        res = self._landmarker.detect_for_video(mp_image, self._timeStamp)
+        res = self._landmarker.detect_for_video(mp_image)
         if res and res.hand_landmarks:
             return res.hand_landmarks[0]
         return None
@@ -35,25 +35,29 @@ class gestureClassifier:
 
     @staticmethod
     def classify(landmarks) -> dict:
+        index_d = gestureClassifier.dist(landmarks[4], landmarks[8])
+        middle_d = gestureClassifier.dist(landmarks[4], landmarks[12])
         return {
-            'index_pinch_dist': gestureClassifier._dist(landmarks[4], landmarks[8]),
-            'middle_pinch_dist': gestureClassifier._dist(landmarks[4], landmarks[12]),
+            'index_pinch_dist': index_d,
+            'middle_pinch_dist': middle_d,
             'is_fist': gestureClassifier._is_fist(landmarks),
             'is_open_palm': gestureClassifier._is_open_palm(landmarks),
             'pointing_dir': gestureClassifier._pointing_direction(landmarks),
+            'is_middle_finger': gestureClassifier._is_middle_finger(landmarks, index_d, middle_d),
+            'middle_ext': gestureClassifier._finger_extended(landmarks, 9, 12),
             'cursor_pos': (landmarks[8].x, landmarks[8].y)
         }
 
     @staticmethod
-    def _dist(a, b):
-        return math.hypot(a.x - b.x, a.y - b.y)
+    def dist(a, b):
+        return math.sqrt((a.x - b.x) ** 2 + (a.y-b.y) ** 2 + (a.z - b.z) ** 2)
 
     @staticmethod
     def _finger_extended(landmarks, mcp_idx, tip_idx):
         wrist = landmarks[0]
         mcp = landmarks[mcp_idx]
         tip = landmarks[tip_idx]
-        return gestureClassifier._dist(tip, wrist) > config.EXTENSION_RATIO * gestureClassifier._dist(mcp, wrist)
+        return gestureClassifier.dist(tip, wrist) > config.EXTENSION_RATIO * gestureClassifier.dist(mcp, wrist)
 
     @staticmethod
     def _is_fist(landmarks):
@@ -81,7 +85,15 @@ class gestureClassifier:
                 elif dx > 0.05:
                     return 'right'
         return None
-        
+
+    @staticmethod
+    def _is_middle_finger(landmarks, mid_pinch, ind_pinch):
+        ext = gestureClassifier._finger_extended
+        mid = ext(landmarks, 9, 12)
+        others_curled = not any(ext(landmarks, m, t) for m, t in [(5, 8), (13, 16), (17, 20)])
+        not_pinch = (ind_pinch > config.PINCH_RELEASE_THRESHOLD and mid_pinch > config.PINCH_RELEASE_THRESHOLD)
+        return mid and others_curled and not_pinch
+
 class cursorSmoother:
     #Exponential moving average on cursor position
 
@@ -125,6 +137,9 @@ class gestureStateMachine:
         self._last_fist_time = 0
         self._last_palm_time = 0
 
+        self._page_dir = None
+        self._page_frames = 0
+        self._page_armed = True
         self._last_scroll_time = 0
 
     def update(self, signals: dict, timestamp_ms: int) -> list:
@@ -135,7 +150,7 @@ class gestureStateMachine:
         events.extend(self._update_middle_pinch(signals, pos))
         events.extend(self._update_fist(signals, timestamp_ms))
         events.extend(self._update_palm(signals, timestamp_ms))
-        events.extend(self._update_scroll(signals, timestamp_ms))
+        events.extend(self._update_edge_scroll(signals, timestamp_ms))
 
         return events
 
@@ -143,7 +158,7 @@ class gestureStateMachine:
         events = []
         
         dist = signals['index_pinch_dist']
-        if dist < config.PINCH_THRESHOLD:
+        if dist < config.PINCH_THRESHOLD and (self._is_dragging or dist <= signals['middle_pinch_dist']):
             self._index_pinch_frames += 1
             if self._index_pinch_frames >=self.db_frames and not self._is_dragging:
                 self._is_dragging = True
@@ -170,7 +185,7 @@ class gestureStateMachine:
         
         dist = signals['middle_pinch_dist']
 
-        if dist < config.PINCH_THRESHOLD:
+        if dist < config.PINCH_THRESHOLD and not self._is_dragging and dist < signals['index_pinch_dist']:
             if self._middle_pinch_armed:
                 self._middle_pinch_frames += 1
                 if self._middle_pinch_frames >= self.db_frames:
@@ -220,16 +235,46 @@ class gestureStateMachine:
 
         return events
 
-    def _update_scroll(self, signals, timestamp_ms):
+    def _update_page_turn(self, signals):
         events = []
-        direction = signals['pointing_dir']
-        if direction:
-            if (timestamp_ms - self._last_scroll_time) >= self.scroll_rep_ms:
-                events.append(('scroll', direction))
-                self._last_scroll_time = timestamp_ms
-        else:
-            self._last_scroll_time = 0
+        d = signals['pointing_dir']
+        if d is None:
+            self._page_dir, self._page_frames, self._page_armed = None, 0, True
+            return events
+        if d != self._page_dir:
+            self._page_dir, self._page_frames = None, 0
+        self._page_frames += 1
+        if self._page_armed and self._page_frames >= self.db_frames:
+            events.append("page_next" if d == 'right' else "page_prev", None)
+            self._page_armed = False
         return events
+    
+    def _update_edge_scroll(self, signals, timestamp_ms):
+        events = []
+
+        if not self._is_dragging:
+            self._last_scroll_time = 0
+            return events
+        y = signals['cursor_pos'][1]
+        margin = config.EDGE_SCROLL_MARGIN
+
+        if y < margin:
+            direction = 'up'
+            intensity = (margin - y) / margin
+        elif y< 1-margin:
+            direction = 'down'
+            intensity = (y - (1-margin)) / margin
+        else:
+            return events
+        
+        intensity = min(intensity, 1.0)
+
+        if(timestamp_ms - self._last_scroll_time) >= self.scroll_rep_ms:
+            events.append(('scroll', {'direction': direction, 'intensity': intensity}))
+            self._last_scroll_time = timestamp_ms
+        return events
+
+
     
 if __name__ == "__main__":
     class MockConfig:
@@ -238,6 +283,7 @@ if __name__ == "__main__":
         SCROLL_REPEAT_MS = 100
         PINCH_THRESHOLD = 0.04
         PINCH_RELEASE_THRESHOLD = 0.04
+        EDGE_SCROLL_MARGIN = 0.15
     
     config = MockConfig()
     gsm = gestureStateMachine(db_frames=2)
@@ -247,7 +293,8 @@ if __name__ == "__main__":
         {'index_pinch_dist': 0.02, 'middle_pinch_dist': 0.1, 'is_fist': False, 'is_open_palm': False, 'pointing_dir': None, 'cursor_pos': (0.5, 0.5)}, 
         {'index_pinch_dist': 0.01, 'middle_pinch_dist': 0.1, 'is_fist': False, 'is_open_palm': False, 'pointing_dir': None, 'cursor_pos': (0.6, 0.5)}, 
         {'index_pinch_dist': 0.01, 'middle_pinch_dist': 0.1, 'is_fist': False, 'is_open_palm': False, 'pointing_dir': None, 'cursor_pos': (0.7, 0.5)}, 
-        {'index_pinch_dist': 0.06, 'middle_pinch_dist': 0.1, 'is_fist': False, 'is_open_palm': False, 'pointing_dir': None, 'cursor_pos': (0.7, 0.5)}, 
+        {'index_pinch_dist': 0.06, 'middle_pinch_dist': 0.1, 'is_fist': False, 'is_open_palm': False, 'pointing_dir': None, 'cursor_pos': (0.7, 0.5)},
+        {'index_pinch_dist': 0.1, 'middle_pinch_dist': 0.05, 'is_fist': False, 'is_open_palm': False, 'pointing_dir': None, 'cursor_pos': (0.5, 0.5)}, 
     ]
     
     for i, signals in enumerate(mock_sequence):

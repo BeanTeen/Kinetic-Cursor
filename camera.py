@@ -3,6 +3,9 @@ import sys
 import config
 from gesture import gesture as ges, gestureClassifier as gc
 
+POINTS = {"wrist": 0, "thumb": 4, "index": 8, "middle": 12, "ring": 16, "pinky": 20}
+COLOR_1 = (0, 255, 0)
+COLOR_2 = (255, 0, 0)
 def main():
     cam = cv2.VideoCapture(config.CAM_INDEX)
     frame_w = config.FRAME_WIDTH
@@ -29,10 +32,26 @@ def main():
         handPoints = tracker.process(rgb_frame)
 
         if handPoints:
-            for point in handPoints:
-                px = int(point.x * frame_w)
-                py = int(point.y * frame_h)
-                cv2.circle(frame, (px, py), radius=5, color=(0,255,0), thickness=-1)
+            for n, (name, index) in enumerate(POINTS.items()):
+                point = handPoints[index]
+                px, py = int(point.x * frame_w), int(point.y * frame_h)
+                cv2.circle(frame, (px, py), radius=5, color=COLOR_1, thickness=-1)
+                cv2.putText(frame, name, (px+12, py-12), cv2.FONT_HERSHEY_SIMPLEX, 0.55, COLOR_2, 2)
+                cv2.putText(frame, f"{name}: ({px}, {py})  ({point.x:.3f}, {point.y:.3f})", (10, 65+n*25), cv2.FONT_HERSHEY_SIMPLEX, 0.55, COLOR_2, 2)
+            thumb_idx = handPoints[POINTS["thumb"]]
+            index_idx = handPoints[POINTS["index"]]
+
+            t_x = int(thumb_idx * frame_w)
+            t_y = int(thumb_idx * frame_h)
+            i_x = int(index_idx * frame_w)
+            i_y = int(index_idx * frame_h)
+
+            mid_x = int(t_x + i_x) // 2
+            mid_y = int(t_y + i_y) // 2
+
+            cv2.line(frame, (t_x, t_y), (i_x, i_y), (0, 255, 255), 2)
+            cv2.circle(frame, (mid_x, mid_y), (0, 255, 255), thickness=-1)
+
             signals = gc.classify(handPoints)
 
             if signals['is_fist']:
@@ -41,13 +60,16 @@ def main():
                 label = "Open Palm"
             elif signals['pointing_dir']:
                 label = f"Pointing {signals['pointing_dir']}"
-            elif signals['index_pinch_dist']:
+            elif signals['is_middle_finger']:
+                label = "Fuck you, too"
+            elif signals['index_pinch_dist'] < config.PINCH_THRESHOLD:
                 label = "Pinch (Index)"
-            elif signals['middle_pinch_dist']:
+            elif signals['middle_pinch_dist'] < config.PINCH_THRESHOLD:
                 label = "Pinch (Middle)"
             else:
                 label = "No Gesture Detected"
-            cv2.putText(frame, label, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2)
+
+            cv2.putText(frame, label, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1.0, COLOR_1, 2)
 
         cv2.imshow("Point Tracker", frame)
         
