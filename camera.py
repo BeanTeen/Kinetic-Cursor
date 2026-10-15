@@ -1,6 +1,7 @@
 import cv2
 import sys
 import config
+import threading
 from gesture import gesture as ges, gestureClassifier as gc
 
 POINTS = {"wrist": 0, "thumb": 4, "index": 8, "middle": 12, "ring": 16, "pinky": 20}
@@ -17,7 +18,12 @@ def main():
         print("Could Not Open Camera")
         sys.exit(1)
 
-    tracker = ges()
+    tracker = None
+
+    def init_tracker():
+        nonlocal tracker
+        tracker=ges()
+    threading.Thread(target=init_tracker, daemon=True).start()
 
     while True:
         ret, frame = cam.read()
@@ -27,6 +33,12 @@ def main():
             break
 
         frame = cv2.flip(frame, 1)
+
+        if tracker is not None:
+            handPoints = tracker.process(rgb_frame)
+        else:
+            handPoints = None
+            cv2.putText(frame, "Loading model...", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1.0, COLOR_2, 2)
 
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         handPoints = tracker.process(rgb_frame)
