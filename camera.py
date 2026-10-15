@@ -50,8 +50,6 @@ def main():
             handPoints = None
             cv2.putText(frame, "Loading model...", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1.0, COLOR_2, 2)
 
-        handPoints = tracker.process(rgb_frame)
-
         if handPoints:
             for n, (name, index) in enumerate(POINTS.items()):
                 point = handPoints[index]
