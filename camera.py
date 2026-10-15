@@ -1,8 +1,11 @@
 import cv2
 import sys
+import time
 import config
 import threading
-from gesture import gesture as ges, gestureClassifier as gc
+from gesture import gesture, gestureClassifier
+from gesture import cursorSmoother, gestureStateMachine
+from actioner import actioner
 
 POINTS = {"wrist": 0, "thumb": 4, "index": 8, "middle": 12, "ring": 16, "pinky": 20}
 COLOR_1 = (0, 255, 0)
@@ -22,8 +25,13 @@ def main():
 
     def init_tracker():
         nonlocal tracker
-        tracker=ges()
+        tracker = gesture()
+    
     threading.Thread(target=init_tracker, daemon=True).start()
+
+    smoother = cursorSmoother()
+    gsm = gestureStateMachine()
+    execu = actioner()
 
     while True:
         ret, frame = cam.read()
@@ -34,13 +42,14 @@ def main():
 
         frame = cv2.flip(frame, 1)
 
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
         if tracker is not None:
             handPoints = tracker.process(rgb_frame)
         else:
             handPoints = None
             cv2.putText(frame, "Loading model...", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1.0, COLOR_2, 2)
 
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         handPoints = tracker.process(rgb_frame)
 
         if handPoints:
@@ -64,7 +73,17 @@ def main():
             cv2.line(frame, (t_x, t_y), (i_x, i_y), (0, 255, 255), 2)
             cv2.circle(frame, (mid_x, mid_y), radius=8, color=(0, 255, 255), thickness=-1)
 
-            signals = gc.classify(handPoints)
+            signals = gestureClassifier.classify(handPoints)
+
+            raw_pos = signals.get('cursor_pos')
+            if raw_pos:
+                signals['cursor_pos'] = smoother.update(raw_pos)
+            else:
+                smoother.reset()
+
+            current_time = int(time.time()*1000)
+            events = gsm.update(signals, current_time)
+            execu.execute(events)
 
             if signals['is_fist']:
                 label = "Fist"
@@ -90,7 +109,8 @@ def main():
 
     cam.release()
     cv2.destroyAllWindows()
-    tracker.close()
+    if tracker is not None:
+        tracker.close()
 
 if __name__ == "__main__":
     main()
