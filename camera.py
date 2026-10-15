@@ -1,6 +1,7 @@
 import cv2
 import sys
 import config
+from overlay import overlay
 from gesture import gesture as ges, gestureClassifier as gc
 
 POINTS = {"wrist": 0, "thumb": 4, "index": 8, "middle": 12, "ring": 16, "pinky": 20}
