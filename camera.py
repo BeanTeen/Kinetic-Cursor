@@ -41,10 +41,10 @@ def main():
             thumb_idx = handPoints[POINTS["thumb"]]
             index_idx = handPoints[POINTS["index"]]
 
-            t_x = int(thumb_idx * frame_w)
-            t_y = int(thumb_idx * frame_h)
-            i_x = int(index_idx * frame_w)
-            i_y = int(index_idx * frame_h)
+            t_x = int(thumb_idx.x * frame_w)
+            t_y = int(thumb_idx.y * frame_h)
+            i_x = int(index_idx.x * frame_w)
+            i_y = int(index_idx.y * frame_h)
 
             mid_x = int(t_x + i_x) // 2
             mid_y = int(t_y + i_y) // 2

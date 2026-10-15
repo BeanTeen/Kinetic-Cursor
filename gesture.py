@@ -22,7 +22,7 @@ class gesture:
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
         self._timeStamp += 33 #shows timestamp in ms
 
-        res = self._landmarker.detect_for_video(mp_image)
+        res = self._landmarker.detect_for_video(mp_image, self._timeStamp)
         if res and res.hand_landmarks:
             return res.hand_landmarks[0]
         return None
