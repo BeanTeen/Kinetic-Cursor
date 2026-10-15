@@ -50,7 +50,7 @@ def main():
             mid_y = int(t_y + i_y) // 2
 
             cv2.line(frame, (t_x, t_y), (i_x, i_y), (0, 255, 255), 2)
-            cv2.circle(frame, (mid_x, mid_y), (0, 255, 255), thickness=-1)
+            cv2.circle(frame, (mid_x, mid_y), radius=8, color=(0, 255, 255), thickness=-1)
 
             signals = gc.classify(handPoints)
 
